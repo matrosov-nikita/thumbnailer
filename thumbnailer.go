@@ -7,6 +7,8 @@ import (
 	"image"
 	"io"
 	"unsafe"
+
+	"github.com/nfnt/resize"
 )
 
 var (
@@ -32,18 +34,18 @@ func (c *FFContext) Thumbnail(dims Dims) (thumb image.Image, err error) {
 			C.free(unsafe.Pointer(img.data))
 		}
 	}()
-	ret := C.generate_thumbnail(&img, c.avFormatCtx, ci.ctx, ci.stream,
-		C.struct_Dims{
-			width:  C.ulong(dims.Width),
-			height: C.ulong(dims.Height),
-		})
+	ret := C.extract_image(&img, c.avFormatCtx, ci.ctx, ci.stream)
 	switch {
 	case ret != 0:
 		err = ffError(ret)
+		return
 	case img.data == nil:
 		err = ErrGetFrame
-	default:
-		thumb = &image.RGBA{
+		return
+	}
+
+	thumb = resize.Thumbnail(dims.Width, dims.Height,
+		&image.RGBA{
 			Pix:    copyCBuffer(img),
 			Stride: 4 * int(img.width),
 			Rect: image.Rectangle{
@@ -52,8 +54,8 @@ func (c *FFContext) Thumbnail(dims Dims) (thumb image.Image, err error) {
 					Y: int(img.height),
 				},
 			},
-		}
-	}
+		},
+		resize.NearestNeighbor)
 	return
 }
 

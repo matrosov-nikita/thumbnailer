@@ -74,6 +74,8 @@ func Process(rs io.ReadSeeker, opts Options) (
 	// TODO: PDF Processing
 	// TODO: SVG processing
 
+	// TODO: Hot paths for image formats supported by Go
+
 	switch src.Mime {
 	case
 		"image/jpeg",

@@ -7,10 +7,6 @@ struct Buffer {
     unsigned long width, height;
 };
 
-struct Dims {
-    unsigned long width, height;
-};
-
 // Writes RGBA thumbnail buffer to img
-int generate_thumbnail(struct Buffer* img, AVFormatContext* avfc,
-    AVCodecContext* avcc, const int stream, const struct Dims thumb_dims);
+int extract_image(struct Buffer* img, AVFormatContext* avfc,
+    AVCodecContext* avcc, const int stream);
