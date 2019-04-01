@@ -1,1 +1,1 @@
-module github.com/bakape/thumbnailer
+module github.com/ElMaxo/thumbnailer
