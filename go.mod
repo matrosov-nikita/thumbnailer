@@ -1,4 +1,4 @@
-module github.com/ElMaxo/thumbnailer
+module github.com/ElMaxo/thumbnailer/v2
 
 go 1.13
 
