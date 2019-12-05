@@ -41,3 +41,9 @@ deps:
 
 build:
 	$(env) go build
+test:
+	go test --race
+
+test_docker:
+	docker build -t thumbnailer_test .
+	docker run --rm thumbnailer_test go test --race

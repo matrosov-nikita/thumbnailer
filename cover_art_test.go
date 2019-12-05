@@ -15,6 +15,9 @@ func TestCoverArt(t *testing.T) {
 
 	var cases []testCase
 	for _, f := range samples {
+		if ignore[f] {
+			continue
+		}
 		cases = append(cases, testCase{f, strings.HasPrefix(f, "with_cover")})
 	}
 

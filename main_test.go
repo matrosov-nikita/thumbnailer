@@ -19,6 +19,7 @@ var samples = [...]string{
 	"no_cover.ogg",
 	"no_sound.mov",
 	"no_sound.webm",
+	"with_sound_vp9.webm",
 	"sample.jpg",
 	"with_cover.mp3",
 	"with_sound.mkv",
@@ -40,6 +41,18 @@ var samples = [...]string{
 	"start_black.webm", // Check the histogram thumbnailing
 	"exif_orientation.jpg",
 	"rare_brand.mp4",
+	"invalid_data.jpg", // Check handling images with some invalid data
+	"sample.zip",
+	"sample.rar",
+	"too small.png",
+	"exact_thumb_size.jpg",
+	"meta_segfault.mp4",
+}
+
+var ignore = map[string]bool{
+	"invalid_data.jpg": true,
+	"sample.zip":       true,
+	"sample.rar":       true,
 }
 
 func TestProcess(t *testing.T) {

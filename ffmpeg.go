@@ -1,7 +1,7 @@
 package thumbnailer
 
 // #cgo pkg-config: libavcodec libavutil libavformat libswscale
-// #cgo CFLAGS: -std=c11
+// #cgo CFLAGS: -std=c11 -g
 // #include "ffmpeg.h"
 import "C"
 import (
@@ -30,8 +30,26 @@ var (
 		m: make(map[uintptr]io.ReadSeeker),
 	}
 
-	// ErrStreamNotFound denotes no steam of this media type was found
-	ErrStreamNotFound = errors.New("no stream of this type found")
+	// Input format specifiers for FFmpeg. These save FFmpeg some overhead on
+	// format detection and also prevent failure to open input on format
+	// detection failure.
+	inputFormats = map[string]*C.char{
+		"image/jpeg":       C.CString("mjpeg"),
+		"image/png":        C.CString("image2"),
+		"image/gif":        C.CString("gif"),
+		"image/webp":       C.CString("webp"),
+		"application/ogg":  C.CString("ogg"),
+		"video/webm":       C.CString("webm"),
+		"video/x-matroska": C.CString("matroska"),
+		"video/mp4":        C.CString("mp4"),
+		"video/avi":        C.CString("avi"),
+		"video/quicktime":  C.CString("mp4"),
+		"video/x-flv":      C.CString("flv"),
+		"audio/mpeg":       C.CString("mp3"),
+		"audio/aac":        C.CString("aac"),
+		"audio/wave":       C.CString("wav"),
+		"audio/x-flac":     C.CString("flac"),
+	}
 )
 
 // C can not retain any pointers to Go memory after the cgo call returns. We
@@ -60,10 +78,7 @@ func (h *handlerMap) Get(k unsafe.Pointer) io.ReadSeeker {
 	handlers, ok := h.m[uintptr(k)]
 	h.RUnlock()
 	if !ok {
-		panic(fmt.Sprintf(
-			"no handlers instance found, according to pointer: %v",
-			k,
-		))
+		panic(fmt.Errorf("no handler instance found for pointer: %v", k))
 	}
 	return handlers
 }
@@ -72,23 +87,6 @@ func (h *handlerMap) Get(k unsafe.Pointer) io.ReadSeeker {
 type codecInfo struct {
 	stream C.int
 	ctx    *C.AVCodecContext
-}
-
-// ffError converts an FFmpeg error code to a Go error with a human-readable
-// error message
-type ffError C.int
-
-// Error formats the FFmpeg error in human-readable format
-func (f ffError) Error() string {
-	buf := C.malloc(1024)
-	defer C.free(buf)
-	C.av_strerror(C.int(f), (*C.char)(buf), 1024)
-	return fmt.Sprintf("ffmpeg: %s", C.GoString((*C.char)(buf)))
-}
-
-// Code returns the underlying FFmpeg error code
-func (f ffError) Code() C.int {
-	return C.int(f)
 }
 
 // FFContext is a wrapper for passing Go I/O interfaces to C
@@ -102,6 +100,13 @@ type FFContext struct {
 // It is the responsibility of the caller to call Close() after finishing
 // using the context.
 func NewFFContext(rs io.ReadSeeker) (*FFContext, error) {
+	return newFFContextWithFormat(rs, nil)
+}
+
+// Like NewFFContext, but optionally specifies the passed input format explicitly.
+// inputFormat can be NULL.
+func newFFContextWithFormat(rs io.ReadSeeker, inputFormat *C.char,
+) (*FFContext, error) {
 	ctx := C.avformat_alloc_context()
 	this := &FFContext{
 		avFormatCtx: ctx,
@@ -111,10 +116,10 @@ func NewFFContext(rs io.ReadSeeker) (*FFContext, error) {
 	this.handlerKey = uintptr(unsafe.Pointer(ctx))
 	handlersMap.Set(this.handlerKey, rs)
 
-	err := C.create_context(&this.avFormatCtx)
+	err := C.create_context(&this.avFormatCtx, inputFormat)
 	if err < 0 {
 		this.Close()
-		return nil, ffError(err)
+		return nil, castError(err)
 	}
 	if this.avFormatCtx == nil {
 		this.Close()
@@ -155,7 +160,7 @@ func (c *FFContext) codecContext(typ FFMediaType) (codecInfo, error) {
 	case err == C.AVERROR_STREAM_NOT_FOUND:
 		return codecInfo{}, ErrStreamNotFound
 	case err < 0:
-		return codecInfo{}, ffError(err)
+		return codecInfo{}, castError(err)
 	}
 
 	ci := codecInfo{
@@ -167,16 +172,12 @@ func (c *FFContext) codecContext(typ FFMediaType) (codecInfo, error) {
 }
 
 // CodecName returns the codec name of the best stream of type typ
-func (c *FFContext) CodecName(typ FFMediaType) (string, error) {
+func (c *FFContext) CodecName(typ FFMediaType) (codec string, err error) {
 	ci, err := c.codecContext(typ)
-	if err == nil {
-		return C.GoString(ci.ctx.codec.name), nil
+	if err != nil {
+		return
 	}
-	fferr, ok := err.(ffError)
-	if ok && fferr.Code() == C.AVERROR_STREAM_NOT_FOUND {
-		err = ErrStreamNotFound
-	}
-	return "", err
+	return C.GoString(ci.ctx.codec.name), nil
 }
 
 // HasStream returns, if the file has a decodeable stream of the passed type

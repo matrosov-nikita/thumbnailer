@@ -4,19 +4,9 @@ package thumbnailer
 // #include <libavutil/log.h>
 import "C"
 import (
-	"errors"
 	"image"
 	"io"
 	"unsafe"
-)
-
-var (
-	// ErrCantThumbnail denotes the input file was valid but no thumbnail could
-	// be generated for it (example: audio file with no cover art).
-	ErrCantThumbnail = errors.New("thumbnail can't be generated")
-
-	// ErrGetFrame denotes an unknown failure to retrieve a video frame
-	ErrGetFrame = errors.New("failed to get frame")
 )
 
 func init() {
@@ -44,7 +34,7 @@ func (c *FFContext) Thumbnail(dims Dims) (thumb image.Image, err error) {
 		})
 	switch {
 	case ret != 0:
-		err = ffError(ret)
+		err = castError(ret)
 	case img.data == nil:
 		err = ErrGetFrame
 	default:
@@ -66,11 +56,7 @@ func processMedia(rs io.ReadSeeker, src *Source, opts Options,
 ) (
 	thumb image.Image, err error,
 ) {
-	_, err = rs.Seek(0, 0)
-	if err != nil {
-		return
-	}
-	c, err := NewFFContext(rs)
+	c, err := newFFContextWithFormat(rs, inputFormats[src.Mime])
 	if err != nil {
 		return
 	}
@@ -94,24 +80,34 @@ func processMedia(rs io.ReadSeeker, src *Source, opts Options,
 			return
 		}
 	}
+
 	if c.HasCoverArt() {
 		thumb, err = processCoverArt(c.CoverArt(), opts)
-	} else {
-		if src.HasVideo {
-			max := opts.MaxSourceDims
-			if max.Width != 0 && src.Width > max.Width {
-				err = ErrTooWide
-				return
-			}
-			if max.Height != 0 && src.Height > max.Height {
-				err = ErrTooTall
-				return
-			}
-
-			thumb, err = c.Thumbnail(opts.ThumbDims)
-		} else {
-			err = ErrCantThumbnail
+		switch err {
+		case nil:
+			return
+		case ErrCantThumbnail:
+			// Try again on the container itself, if cover art thumbnailing
+			// fails
+		default:
+			return
 		}
+	}
+
+	if src.HasVideo {
+		max := opts.MaxSourceDims
+		if max.Width != 0 && src.Width > max.Width {
+			err = ErrTooWide
+			return
+		}
+		if max.Height != 0 && src.Height > max.Height {
+			err = ErrTooTall
+			return
+		}
+
+		thumb, err = c.Thumbnail(opts.ThumbDims)
+	} else {
+		err = ErrCantThumbnail
 	}
 	return
 }
